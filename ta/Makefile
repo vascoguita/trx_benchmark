@@ -1,0 +1,8 @@
+CFG_TEE_TA_LOG_LEVEL ?= 4
+CPPFLAGS += -DCFG_TEE_TA_LOG_LEVEL=$(CFG_TEE_TA_LOG_LEVEL)
+
+BINARY = e79a18f5-f5c5-4487-aa81-b94162f613a5
+
+LDADD += $(TA_DEV_KIT_DIR)/lib/trx.a
+
+include $(TA_DEV_KIT_DIR)/mk/ta_dev_kit.mk
