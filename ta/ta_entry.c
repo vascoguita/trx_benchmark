@@ -1,6 +1,8 @@
 #include <tee_internal_api.h>
 #include <trx_benchmark_ta.h>
 
+#include "trx_benchmark_ta_private.h"
+
 TEE_Result TA_CreateEntryPoint(void)
 {
     DMSG("has been called");
@@ -40,12 +42,10 @@ void TA_CloseSessionEntryPoint(void *sess_ctx)
 
 TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx, uint32_t cmd, uint32_t param_types, TEE_Param params[4])
 {
-    (void)&sess_ctx;
-    (void)&params;
-    (void)&param_types;
-
     switch (cmd)
     {
+    case TA_TRX_BENCHMARK_CMD_WRITE:
+        return trx_benchmark_write(sess_ctx, param_types, params);
     default:
         return TEE_ERROR_NOT_SUPPORTED;
     }
