@@ -9,7 +9,7 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
     TEE_Result res;
     uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index;
     unsigned long min, max, step, buffer_size;
-    uint8_t *buffer = NULL, *tmp_buffer = NULL;
+    uint8_t *buffer = NULL;
     trx_handle handle;
     TEE_Time start, end;
 
@@ -54,30 +54,16 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
 
     for (buffer_size = min, report_index = 0; buffer_size <= max; buffer_size += step, report_index += 2)
     {
+        if(buffer != NULL)
+        {
+            TEE_Free(buffer);
+        }
+        buffer = TEE_Malloc(buffer_size, TEE_MALLOC_FILL_ZERO);
         if (!buffer)
         {
-            buffer = TEE_Malloc(buffer_size, TEE_MALLOC_FILL_ZERO);
-            if (!buffer)
-            {
-                trx_handle_clear(handle);
-                EMSG("failed allocating buffer of size: %lu", buffer_size);
-                return TEE_ERROR_OUT_OF_MEMORY;
-            }
-        }
-        else
-        {
-            tmp_buffer = TEE_Realloc(buffer, buffer_size);
-            if (!tmp_buffer)
-            {
-                trx_handle_clear(handle);
-                TEE_Free(buffer);
-                EMSG("failed allocating buffer of size: %lu", buffer_size);
-                return TEE_ERROR_OUT_OF_MEMORY;
-            }
-            else
-            {
-                buffer = tmp_buffer;
-            }
+            trx_handle_clear(handle);
+            EMSG("failed allocating buffer of size: %lu", buffer_size);
+            return TEE_ERROR_OUT_OF_MEMORY;
         }
 
         TEE_GetSystemTime(&start);
