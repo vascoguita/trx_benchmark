@@ -23,5 +23,8 @@ Open the project directory on the destination platform and run the following com
 Open the project directory on the destination platform and run the following command:
 
 ```shell
-./host/trx_benchmark
+./host/trx_benchmark -o <operation> -m <minimum_value> -M <maximum_value> -s <step>
 ```
+
+The TRX benchmark supports the following operations:
+* write
