@@ -8,7 +8,7 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
 {
     TEE_Result res;
     uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index;
-    unsigned long min, max, step, buffer_size;
+    unsigned long min, max, step, rounds, round, sum, buffer_size;
     uint8_t *buffer = NULL;
     trx_handle handle;
     TEE_Time start, end;
@@ -28,12 +28,13 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
     min = (unsigned long)params[0].value.a;
     max = (unsigned long)params[0].value.b;
     step = (unsigned long)params[1].value.a;
+    rounds = (unsigned long)params[1].value.b;
     report = params[2].memref.buffer;
     report_size = &(params[2].memref.size);
 
-    if (min <= 0 || max < min || step <= 0)
+    if (min <= 0 || max < min || step <= 0 || rounds <= 0)
     {
-        EMSG("failed checking parameter values: min = %lu, max = %lu, step = %lu", min, max, step);
+        EMSG("failed checking parameter values: min = %lu, max = %lu, step = %lu, rounds = %lu", min, max, step, rounds);
         return TEE_ERROR_BAD_PARAMETERS;
     }
 
@@ -54,7 +55,7 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
 
     for (buffer_size = min, report_index = 0; buffer_size <= max; buffer_size += step, report_index += 2)
     {
-        if(buffer != NULL)
+        if (buffer != NULL)
         {
             TEE_Free(buffer);
         }
@@ -66,19 +67,23 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
             return TEE_ERROR_OUT_OF_MEMORY;
         }
 
-        TEE_GetSystemTime(&start);
-        res = trx_write(handle, default_poid, default_poid_size, buffer, buffer_size);
-        TEE_GetSystemTime(&end);
-        if (res != TEE_SUCCESS)
+        for (round = 0, sum = 0; round < rounds; round++)
         {
-            trx_handle_clear(handle);
-            TEE_Free(buffer);
-            DMSG("trx_write failed with code 0x%x", res);
-            return TEE_ERROR_GENERIC;
+            TEE_GetSystemTime(&start);
+            res = trx_write(handle, default_poid, default_poid_size, buffer, buffer_size);
+            TEE_GetSystemTime(&end);
+            if (res != TEE_SUCCESS)
+            {
+                trx_handle_clear(handle);
+                TEE_Free(buffer);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+            sum += execution_time(start, end);
         }
 
         report[report_index] = buffer_size;
-        report[report_index + 1] = execution_time(start, end);
+        report[report_index + 1] = sum/rounds;
     }
 
     trx_handle_clear(handle);
@@ -95,7 +100,7 @@ uint32_t execution_time(TEE_Time start, TEE_Time end)
 
     TEE_GetSystemTime(&rtd_start);
     TEE_GetSystemTime(&rtd_end);
-    rtd = (rtd_end.seconds - rtd_start.seconds)*1000 + rtd_end.millis - rtd_start.millis;
+    rtd = (rtd_end.seconds - rtd_start.seconds) * 1000 + rtd_end.millis - rtd_start.millis;
 
-    return (end.seconds - start.seconds)*1000 + end.millis - start.millis - rtd;
+    return (end.seconds - start.seconds) * 1000 + end.millis - start.millis - rtd;
 }

@@ -18,10 +18,11 @@ int main(int argc, char *argv[])
     char *min_str = NULL;
     char *max_str = NULL;
     char *step_str = NULL;
-    unsigned long min, max, step;
+    char *rounds_str = NULL;
+    unsigned long min, max, step, rounds;
     char *p;
 
-    while ((opt = getopt(argc, argv, "o:m:M:s:")) != -1)
+    while ((opt = getopt(argc, argv, "o:m:M:s:r:")) != -1)
     {
         switch (opt)
         {
@@ -37,6 +38,9 @@ int main(int argc, char *argv[])
         case 's':
             step_str = optarg;
             break;
+        case 'r':
+            rounds_str = optarg;
+            break;
         case ':':
             errx(1, usage, argv[0]);
             break;
@@ -46,7 +50,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (!operation || !min_str || !max_str || !step_str)
+    if (!operation || !min_str || !max_str || !step_str || !rounds_str)
     {
         errx(1, usage, argv[0]);
     }
@@ -69,9 +73,15 @@ int main(int argc, char *argv[])
         errx(1, "failed to read step value. %s", strerror(errno));
     }
 
+    rounds = strtoul(rounds_str, &p, 10);
+    if (errno != 0 || *p != '\0')
+    {
+        errx(1, "failed to read rounds value. %s", strerror(errno));
+    }
+
     if (!strcmp(operation, write_operation))
     {
-        trx_benchmark_write(min, max, step);
+        trx_benchmark_write(min, max, step, rounds);
     }
     else
     {
@@ -106,7 +116,7 @@ void terminate_tee_session(TEEC_Context *ctx, TEEC_Session *sess)
     TEEC_FinalizeContext(ctx);
 }
 
-void trx_benchmark_write(unsigned long min, unsigned long max, unsigned long step)
+void trx_benchmark_write(unsigned long min, unsigned long max, unsigned long step, unsigned long rounds)
 {
     TEEC_Result res;
     TEEC_Operation op;
@@ -125,6 +135,7 @@ void trx_benchmark_write(unsigned long min, unsigned long max, unsigned long ste
     op.params[0].value.a = min;
     op.params[0].value.b = max;
     op.params[1].value.a = step;
+    op.params[1].value.b = rounds;
     op.params[2].tmpref.buffer = report;
     op.params[2].tmpref.size = report_size;
 
