@@ -48,6 +48,12 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx, uint32_t cmd, uint32_t par
         return trx_benchmark_write(sess_ctx, param_types, params);
     case TA_TRX_BENCHMARK_CMD_READ:
         return trx_benchmark_read(sess_ctx, param_types, params);
+    case TA_TRX_BENCHMARK_CMD_GP_WRITE:
+        return trx_benchmark_gp_write(sess_ctx, param_types, params);
+    case TA_TRX_BENCHMARK_CMD_GP_READ:
+        return trx_benchmark_gp_read(sess_ctx, param_types, params);
+    case TA_TRX_BENCHMARK_CMD_SHARE:
+        return trx_benchmark_share(sess_ctx, param_types, params);
     default:
         return TEE_ERROR_NOT_SUPPORTED;
     }

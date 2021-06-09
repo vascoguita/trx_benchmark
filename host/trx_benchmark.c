@@ -50,42 +50,86 @@ int main(int argc, char *argv[])
         }
     }
 
-    if (!operation || !min_str || !max_str || !step_str || !rounds_str)
+    if (min_str)
+    {
+        min = strtoul(min_str, &p, 10);
+        if (errno != 0 || *p != '\0')
+        {
+            errx(1, "failed to read min value. %s", strerror(errno));
+        }
+    }
+
+    if (max_str)
+    {
+        max = strtoul(max_str, &p, 10);
+        if (errno != 0 || *p != '\0')
+        {
+            errx(1, "failed to read max value. %s", strerror(errno));
+        }
+    }
+
+    if (step_str)
+    {
+        step = strtoul(step_str, &p, 10);
+        if (errno != 0 || *p != '\0')
+        {
+            errx(1, "failed to read step value. %s", strerror(errno));
+        }
+    }
+
+    if (rounds_str)
+    {
+        rounds = strtoul(rounds_str, &p, 10);
+        if (errno != 0 || *p != '\0')
+        {
+            errx(1, "failed to read rounds value. %s", strerror(errno));
+        }
+    }
+
+    if (!operation)
     {
         errx(1, usage, argv[0]);
     }
 
-    min = strtoul(min_str, &p, 10);
-    if (errno != 0 || *p != '\0')
-    {
-        errx(1, "failed to read min value. %s", strerror(errno));
-    }
-
-    max = strtoul(max_str, &p, 10);
-    if (errno != 0 || *p != '\0')
-    {
-        errx(1, "failed to read max value. %s", strerror(errno));
-    }
-
-    step = strtoul(step_str, &p, 10);
-    if (errno != 0 || *p != '\0')
-    {
-        errx(1, "failed to read step value. %s", strerror(errno));
-    }
-
-    rounds = strtoul(rounds_str, &p, 10);
-    if (errno != 0 || *p != '\0')
-    {
-        errx(1, "failed to read rounds value. %s", strerror(errno));
-    }
-
     if (!strcmp(operation, write_operation))
     {
+        if (!min_str || !max_str || !step || !rounds)
+        {
+            errx(1, usage, argv[0]);
+        }
         trx_benchmark_write(min, max, step, rounds);
     }
     else if (!strcmp(operation, read_operation))
     {
+        if (!min_str || !max_str || !step || !rounds)
+        {
+            errx(1, usage, argv[0]);
+        }
         trx_benchmark_read(min, max, step, rounds);
+    }
+    else if (!strcmp(operation, gp_write_operation))
+    {
+        if (!min_str || !max_str || !step || !rounds)
+        {
+            errx(1, usage, argv[0]);
+        }
+        trx_benchmark_gp_write(min, max, step, rounds);
+    }
+    else if (!strcmp(operation, gp_read_operation))
+    {
+        if (!min_str || !max_str || !step || !rounds)
+        {
+            errx(1, usage, argv[0]);
+        }
+        trx_benchmark_gp_read(min, max, step, rounds);
+    }
+    else if (!strcmp(operation, share_operation))
+    {
+        if (!rounds)
+        {
+            errx(1, usage, argv[0]);
+        }
+        trx_benchmark_share(rounds);
     }
     else
     {
@@ -120,6 +164,27 @@ void terminate_tee_session(TEEC_Context *ctx, TEEC_Session *sess)
     TEEC_FinalizeContext(ctx);
 }
 
+int trx_benchmark_print(uint32_t *report, uint32_t report_size)
+{
+    uint32_t report_len, report_index;
+
+    report_len = report_size / sizeof(uint32_t);
+
+    if (report_len % 2)
+    {
+        return 1;
+    }
+
+    printf("size (B), execution time (ms)\n");
+
+    for (report_index = 0; report_index < report_len; report_index += 2)
+    {
+        printf("%" PRIu32 ",%" PRIu32 "\n", report[report_index], report[report_index + 1]);
+    }
+
+    return 0;
+}
+
 void trx_benchmark_write(unsigned long min, unsigned long max, unsigned long step, unsigned long rounds)
 {
     TEEC_Result res;
@@ -144,14 +209,14 @@ void trx_benchmark_write(unsigned long min, unsigned long max, unsigned long ste
     op.params[2].tmpref.size = report_size;
 
     res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_WRITE, &op, &err_origin);
-    if(res != TEEC_ERROR_SHORT_BUFFER)
+    if (res != TEEC_ERROR_SHORT_BUFFER)
     {
         errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
     }
 
     report_size = op.params[2].tmpref.size;
     report = malloc(report_size);
-    if(!report)
+    if (!report)
     {
         terminate_tee_session(&ctx, &sess);
         errx(1, "failed to allocating report buffer");
@@ -160,14 +225,14 @@ void trx_benchmark_write(unsigned long min, unsigned long max, unsigned long ste
     op.params[2].tmpref.size = report_size;
 
     res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_WRITE, &op, &err_origin);
-    if(res != TEEC_SUCCESS)
+    if (res != TEEC_SUCCESS)
     {
         free(report);
         errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
     }
 
     print_res = trx_benchmark_print(report, report_size);
-    if(print_res)
+    if (print_res)
     {
         free(report);
         terminate_tee_session(&ctx, &sess);
@@ -202,14 +267,14 @@ void trx_benchmark_read(unsigned long min, unsigned long max, unsigned long step
     op.params[2].tmpref.size = report_size;
 
     res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_READ, &op, &err_origin);
-    if(res != TEEC_ERROR_SHORT_BUFFER)
+    if (res != TEEC_ERROR_SHORT_BUFFER)
     {
         errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
     }
 
     report_size = op.params[2].tmpref.size;
     report = malloc(report_size);
-    if(!report)
+    if (!report)
     {
         terminate_tee_session(&ctx, &sess);
         errx(1, "failed to allocating report buffer");
@@ -218,14 +283,14 @@ void trx_benchmark_read(unsigned long min, unsigned long max, unsigned long step
     op.params[2].tmpref.size = report_size;
 
     res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_READ, &op, &err_origin);
-    if(res != TEEC_SUCCESS)
+    if (res != TEEC_SUCCESS)
     {
         free(report);
         errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
     }
 
     print_res = trx_benchmark_print(report, report_size);
-    if(print_res)
+    if (print_res)
     {
         free(report);
         terminate_tee_session(&ctx, &sess);
@@ -236,23 +301,173 @@ void trx_benchmark_read(unsigned long min, unsigned long max, unsigned long step
     terminate_tee_session(&ctx, &sess);
 }
 
-int trx_benchmark_print(uint32_t *report, uint32_t report_size)
+void trx_benchmark_gp_write(unsigned long min, unsigned long max, unsigned long step, unsigned long rounds)
 {
-    uint32_t report_len, report_index;
+    TEEC_Result res;
+    TEEC_Operation op;
+    uint32_t err_origin;
+    TEEC_Context ctx;
+    TEEC_Session sess;
+    uint32_t *report = NULL;
+    uint32_t report_size = 0;
+    int print_res;
 
-    report_len = report_size / sizeof(uint32_t);
+    prepare_tee_session(&ctx, &sess);
 
-    if(report_len % 2)
+    memset(&op, 0, sizeof(op));
+    op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INPUT, TEEC_VALUE_INPUT,
+                                     TEEC_MEMREF_TEMP_OUTPUT, TEEC_NONE);
+    op.params[0].value.a = min;
+    op.params[0].value.b = max;
+    op.params[1].value.a = step;
+    op.params[1].value.b = rounds;
+    op.params[2].tmpref.buffer = report;
+    op.params[2].tmpref.size = report_size;
+
+    res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_GP_WRITE, &op, &err_origin);
+    if (res != TEEC_ERROR_SHORT_BUFFER)
     {
-        return 1;
+        errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
     }
 
-    printf("size (B), execution time (ms)\n");
-
-    for(report_index = 0; report_index < report_len; report_index += 2)
+    report_size = op.params[2].tmpref.size;
+    report = malloc(report_size);
+    if (!report)
     {
-        printf("%" PRIu32 ",%" PRIu32 "\n", report[report_index], report[report_index + 1]);
+        terminate_tee_session(&ctx, &sess);
+        errx(1, "failed to allocating report buffer");
+    }
+    op.params[2].tmpref.buffer = report;
+    op.params[2].tmpref.size = report_size;
+
+    res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_GP_WRITE, &op, &err_origin);
+    if (res != TEEC_SUCCESS)
+    {
+        free(report);
+        errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
     }
 
-    return 0;
+    print_res = trx_benchmark_print(report, report_size);
+    if (print_res)
+    {
+        free(report);
+        terminate_tee_session(&ctx, &sess);
+        errx(1, "failed to print report");
+    }
+
+    free(report);
+    terminate_tee_session(&ctx, &sess);
+}
+
+void trx_benchmark_gp_read(unsigned long min, unsigned long max, unsigned long step, unsigned long rounds)
+{
+    TEEC_Result res;
+    TEEC_Operation op;
+    uint32_t err_origin;
+    TEEC_Context ctx;
+    TEEC_Session sess;
+    uint32_t *report = NULL;
+    uint32_t report_size = 0;
+    int print_res;
+
+    prepare_tee_session(&ctx, &sess);
+
+    memset(&op, 0, sizeof(op));
+    op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INPUT, TEEC_VALUE_INPUT,
+                                     TEEC_MEMREF_TEMP_OUTPUT, TEEC_NONE);
+    op.params[0].value.a = min;
+    op.params[0].value.b = max;
+    op.params[1].value.a = step;
+    op.params[1].value.b = rounds;
+    op.params[2].tmpref.buffer = report;
+    op.params[2].tmpref.size = report_size;
+
+    res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_GP_READ, &op, &err_origin);
+    if (res != TEEC_ERROR_SHORT_BUFFER)
+    {
+        errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
+    }
+
+    report_size = op.params[2].tmpref.size;
+    report = malloc(report_size);
+    if (!report)
+    {
+        terminate_tee_session(&ctx, &sess);
+        errx(1, "failed to allocating report buffer");
+    }
+    op.params[2].tmpref.buffer = report;
+    op.params[2].tmpref.size = report_size;
+
+    res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_GP_READ, &op, &err_origin);
+    if (res != TEEC_SUCCESS)
+    {
+        free(report);
+        errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
+    }
+
+    print_res = trx_benchmark_print(report, report_size);
+    if (print_res)
+    {
+        free(report);
+        terminate_tee_session(&ctx, &sess);
+        errx(1, "failed to print report");
+    }
+
+    free(report);
+    terminate_tee_session(&ctx, &sess);
+}
+
+void trx_benchmark_share(unsigned long rounds)
+{
+    TEEC_Result res;
+    TEEC_Operation op;
+    uint32_t err_origin;
+    TEEC_Context ctx;
+    TEEC_Session sess;
+    uint32_t *report = NULL;
+    uint32_t report_size = 0;
+    int print_res;
+
+    prepare_tee_session(&ctx, &sess);
+
+    memset(&op, 0, sizeof(op));
+    op.paramTypes = TEEC_PARAM_TYPES(TEEC_VALUE_INPUT, TEEC_MEMREF_TEMP_OUTPUT,
+                                     TEEC_NONE, TEEC_NONE);
+    op.params[0].value.a = rounds;
+    op.params[1].tmpref.buffer = report;
+    op.params[1].tmpref.size = report_size;
+
+    res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_SHARE, &op, &err_origin);
+    if (res != TEEC_ERROR_SHORT_BUFFER)
+    {
+        errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
+    }
+
+    report_size = op.params[2].tmpref.size;
+    report = malloc(report_size);
+    if (!report)
+    {
+        terminate_tee_session(&ctx, &sess);
+        errx(1, "failed to allocating report buffer");
+    }
+    op.params[2].tmpref.buffer = report;
+    op.params[2].tmpref.size = report_size;
+
+    res = TEEC_InvokeCommand(&sess, TA_TRX_BENCHMARK_CMD_SHARE, &op, &err_origin);
+    if (res != TEEC_SUCCESS)
+    {
+        free(report);
+        errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
+    }
+
+    print_res = trx_benchmark_print(report, report_size);
+    if (print_res)
+    {
+        free(report);
+        terminate_tee_session(&ctx, &sess);
+        errx(1, "failed to print report");
+    }
+
+    free(report);
+    terminate_tee_session(&ctx, &sess);
 }
