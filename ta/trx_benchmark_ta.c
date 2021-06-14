@@ -20,10 +20,11 @@ uint32_t execution_time(TEE_Time start, TEE_Time end)
 TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
 {
     TEE_Result res;
-    uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index;
+    uint32_t exp_param_types, *report_size, exp_report_size, report_index;
     unsigned long min, max, step, rounds, round, sum, buffer_size;
     uint8_t *buffer = NULL;
     trx_handle handle;
+    double *report, *results;
     TEE_Time start, end;
 
     (void)&sess_ctx;
@@ -51,7 +52,7 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
         return TEE_ERROR_BAD_PARAMETERS;
     }
 
-    exp_report_size = (((max - min) / step) + 1) * sizeof(uint32_t) * 2;
+    exp_report_size = (((max - min) / step) + 1) * sizeof(double) * 3;
     if (*report_size < exp_report_size)
     {
         EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
@@ -59,14 +60,22 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
         return TEE_ERROR_SHORT_BUFFER;
     }
 
+    results = TEE_Malloc(rounds * sizeof(double), TEE_MALLOC_FILL_ZERO);
+    if(!results)
+    {
+        EMSG("failed allocating \"results\" buffer of size: %lu", rounds);
+        return TEE_ERROR_OUT_OF_MEMORY;
+    }
+
     res = trx_handle_init(&handle);
     if (res != TEE_SUCCESS)
     {
+        TEE_Free(results);
         EMSG("trx_handle_init failed with code 0x%x", res);
         return res;
     }
 
-    for (buffer_size = min, report_index = 0; buffer_size <= max; buffer_size += step, report_index += 2)
+    for (buffer_size = min, report_index = 0; buffer_size <= max; buffer_size += step, report_index += 3)
     {
         if (buffer != NULL)
         {
@@ -75,6 +84,7 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
         buffer = TEE_Malloc(buffer_size, TEE_MALLOC_FILL_ZERO);
         if (!buffer)
         {
+            TEE_Free(results);
             trx_handle_clear(handle);
             EMSG("failed allocating buffer of size: %lu", buffer_size);
             return TEE_ERROR_OUT_OF_MEMORY;
@@ -87,18 +97,27 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
             TEE_GetSystemTime(&end);
             if (res != TEE_SUCCESS)
             {
+                TEE_Free(results);
                 trx_handle_clear(handle);
                 TEE_Free(buffer);
                 DMSG("trx_write failed with code 0x%x", res);
                 return TEE_ERROR_GENERIC;
             }
-            sum += execution_time(start, end);
+            results[round] = execution_time(start, end);
+            sum += results[round];
         }
 
         report[report_index] = buffer_size;
         report[report_index + 1] = sum / rounds;
+
+        for (round = 0, report[report_index + 2] = 0; round < rounds; rounds++)
+        {
+            report[report_index + 2] += (results[round] - report[report_index + 1]) * (results[round] - report[report_index + 1]);
+        }
+        report[report_index + 2] = report[report_index + 2] / rounds;
     }
 
+    TEE_Free(results);
     trx_handle_clear(handle);
     TEE_Free(buffer);
 
@@ -108,11 +127,12 @@ TEE_Result trx_benchmark_write(void *sess_ctx, uint32_t param_types, TEE_Param p
 TEE_Result trx_benchmark_read(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
 {
     TEE_Result res;
-    uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index;
+    uint32_t exp_param_types, *report_size, exp_report_size, report_index;
     unsigned long min, max, step, rounds, round, sum, buffer_size;
     uint8_t *buffer = NULL;
     size_t tmp_buffer_size;
     trx_handle handle;
+    double *report, *results;
     TEE_Time start, end;
 
     (void)&sess_ctx;
@@ -140,7 +160,7 @@ TEE_Result trx_benchmark_read(void *sess_ctx, uint32_t param_types, TEE_Param pa
         return TEE_ERROR_BAD_PARAMETERS;
     }
 
-    exp_report_size = (((max - min) / step) + 1) * sizeof(uint32_t) * 2;
+    exp_report_size = (((max - min) / step) + 1) * sizeof(double) * 3;
     if (*report_size < exp_report_size)
     {
         EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
@@ -148,14 +168,22 @@ TEE_Result trx_benchmark_read(void *sess_ctx, uint32_t param_types, TEE_Param pa
         return TEE_ERROR_SHORT_BUFFER;
     }
 
+    results = TEE_Malloc(rounds * sizeof(double), TEE_MALLOC_FILL_ZERO);
+    if(!results)
+    {
+        EMSG("failed allocating \"results\" buffer of size: %lu", rounds);
+        return TEE_ERROR_OUT_OF_MEMORY;
+    }
+
     res = trx_handle_init(&handle);
     if (res != TEE_SUCCESS)
     {
+        TEE_Free(results);
         EMSG("trx_handle_init failed with code 0x%x", res);
         return res;
     }
 
-    for (buffer_size = min, report_index = 0; buffer_size <= max; buffer_size += step, report_index += 2)
+    for (buffer_size = min, report_index = 0; buffer_size <= max; buffer_size += step, report_index += 3)
     {
         if (buffer != NULL)
         {
@@ -164,6 +192,7 @@ TEE_Result trx_benchmark_read(void *sess_ctx, uint32_t param_types, TEE_Param pa
         buffer = TEE_Malloc(buffer_size, TEE_MALLOC_FILL_ZERO);
         if (!buffer)
         {
+            TEE_Free(results);
             trx_handle_clear(handle);
             EMSG("failed allocating buffer of size: %lu", buffer_size);
             return TEE_ERROR_OUT_OF_MEMORY;
@@ -174,6 +203,7 @@ TEE_Result trx_benchmark_read(void *sess_ctx, uint32_t param_types, TEE_Param pa
             res = trx_write(handle, default_poid, default_poid_size, buffer, buffer_size);
             if (res != TEE_SUCCESS)
             {
+                TEE_Free(results);
                 trx_handle_clear(handle);
                 TEE_Free(buffer);
                 DMSG("trx_write failed with code 0x%x", res);
@@ -186,19 +216,28 @@ TEE_Result trx_benchmark_read(void *sess_ctx, uint32_t param_types, TEE_Param pa
             TEE_GetSystemTime(&end);
             if ((res != TEE_SUCCESS) || (tmp_buffer_size != buffer_size))
             {
+                TEE_Free(results);
                 trx_handle_clear(handle);
                 TEE_Free(buffer);
                 DMSG("trx_write failed with code 0x%x", res);
                 return TEE_ERROR_GENERIC;
             }
 
-            sum += execution_time(start, end);
+            results[round] = execution_time(start, end);
+            sum += results[round];
         }
 
         report[report_index] = buffer_size;
         report[report_index + 1] = sum / rounds;
+
+        for (round = 0, report[report_index + 2] = 0; round < rounds; rounds++)
+        {
+            report[report_index + 2] += (results[round] - report[report_index + 1]) * (results[round] - report[report_index + 1]);
+        }
+        report[report_index + 2] = report[report_index + 2] / rounds;
     }
 
+    TEE_Free(results);
     trx_handle_clear(handle);
     TEE_Free(buffer);
 
@@ -208,11 +247,12 @@ TEE_Result trx_benchmark_read(void *sess_ctx, uint32_t param_types, TEE_Param pa
 TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
 {
     TEE_Result res;
-    uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index, flags;
+    uint32_t exp_param_types, *report_size, exp_report_size, report_index, flags;
     unsigned long min, max, step, rounds, round, sum, buffer_size, po_exists;
     uint8_t *buffer = NULL, *id = NULL;
     TEE_Time start, end;
     TEE_ObjectHandle obj = TEE_HANDLE_NULL;
+    double *report, *results;
 
     (void)&sess_ctx;
 
@@ -239,7 +279,7 @@ TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Para
         return TEE_ERROR_BAD_PARAMETERS;
     }
 
-    exp_report_size = (((max - min) / step) + 1) * sizeof(uint32_t) * 2;
+    exp_report_size = (((max - min) / step) + 1) * sizeof(double) * 3;
     if (*report_size < exp_report_size)
     {
         EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
@@ -247,8 +287,16 @@ TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Para
         return TEE_ERROR_SHORT_BUFFER;
     }
 
+    results = TEE_Malloc(rounds * sizeof(double), TEE_MALLOC_FILL_ZERO);
+    if(!results)
+    {
+        EMSG("failed allocating \"results\" buffer of size: %lu", rounds);
+        return TEE_ERROR_OUT_OF_MEMORY;
+    }
+
     if (!(id = TEE_Malloc(default_poid_size, 0)))
     {
+        TEE_Free(results);
         EMSG("failed calling function \'TEE_Malloc\'");
         return TEE_ERROR_GENERIC;
     }
@@ -256,7 +304,7 @@ TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Para
     flags = TEE_DATA_FLAG_ACCESS_READ | TEE_DATA_FLAG_ACCESS_WRITE |
             TEE_DATA_FLAG_ACCESS_WRITE_META | TEE_DATA_FLAG_OVERWRITE;
 
-    for (buffer_size = min, report_index = 0, po_exists = 0; buffer_size <= max; buffer_size += step, report_index += 2)
+    for (buffer_size = min, report_index = 0, po_exists = 0; buffer_size <= max; buffer_size += step, report_index += 3)
     {
         if (buffer != NULL)
         {
@@ -265,6 +313,7 @@ TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Para
         buffer = TEE_Malloc(buffer_size, TEE_MALLOC_FILL_ZERO);
         if (!buffer)
         {
+            TEE_Free(results);
             TEE_Free(id);
             EMSG("failed allocating buffer of size: %lu", buffer_size);
             return TEE_ERROR_OUT_OF_MEMORY;
@@ -278,6 +327,7 @@ TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Para
                 res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE, id, default_poid_size, flags, &obj);
                 if (res != TEE_SUCCESS)
                 {
+                    TEE_Free(results);
                     TEE_Free(id);
                     TEE_Free(buffer);
                     EMSG("failed calling function \'TEE_OpenPersistentObject\'");
@@ -286,6 +336,7 @@ TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Para
                 res = TEE_WriteObjectData(obj, buffer, buffer_size);
                 if (res != TEE_SUCCESS)
                 {
+                    TEE_Free(results);
                     TEE_CloseObject(obj);
                     TEE_Free(id);
                     TEE_Free(buffer);
@@ -302,6 +353,7 @@ TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Para
                                                  TEE_HANDLE_NULL, buffer, buffer_size, &obj);
                 if (res != TEE_SUCCESS)
                 {
+                    TEE_Free(results);
                     TEE_Free(id);
                     TEE_Free(buffer);
                     EMSG("failed calling function \'TEE_CreatePersistentObject\'");
@@ -312,13 +364,21 @@ TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Para
                 po_exists = 1;
             }
 
-            sum += execution_time(start, end);
+            results[round] = execution_time(start, end);
+            sum += results[round];
         }
 
         report[report_index] = buffer_size;
         report[report_index + 1] = sum / rounds;
+
+        for (round = 0, report[report_index + 2] = 0; round < rounds; rounds++)
+        {
+            report[report_index + 2] += (results[round] - report[report_index + 1]) * (results[round] - report[report_index + 1]);
+        }
+        report[report_index + 2] = report[report_index + 2] / rounds;
     }
 
+    TEE_Free(results);
     TEE_Free(id);
     TEE_Free(buffer);
 
@@ -328,11 +388,12 @@ TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Para
 TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
 {
     TEE_Result res;
-    uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index, flags, count;
+    uint32_t exp_param_types, *report_size, exp_report_size, report_index, flags, count;
     unsigned long min, max, step, rounds, round, sum, buffer_size, po_exists;
     uint8_t *buffer = NULL, *id = NULL;
     TEE_Time start, end;
     TEE_ObjectHandle obj = TEE_HANDLE_NULL;
+    double *report, *results;
 
     (void)&sess_ctx;
 
@@ -359,7 +420,7 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
         return TEE_ERROR_BAD_PARAMETERS;
     }
 
-    exp_report_size = (((max - min) / step) + 1) * sizeof(uint32_t) * 2;
+    exp_report_size = (((max - min) / step) + 1) * sizeof(double) * 3;
     if (*report_size < exp_report_size)
     {
         EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
@@ -367,8 +428,16 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
         return TEE_ERROR_SHORT_BUFFER;
     }
 
+    results = TEE_Malloc(rounds * sizeof(double), TEE_MALLOC_FILL_ZERO);
+    if(!results)
+    {
+        EMSG("failed allocating \"results\" buffer of size: %lu", rounds);
+        return TEE_ERROR_OUT_OF_MEMORY;
+    }
+
     if (!(id = TEE_Malloc(default_poid_size, 0)))
     {
+        TEE_Free(results);
         EMSG("failed calling function \'TEE_Malloc\'");
         return TEE_ERROR_GENERIC;
     }
@@ -376,7 +445,7 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
     flags = TEE_DATA_FLAG_ACCESS_READ | TEE_DATA_FLAG_ACCESS_WRITE |
             TEE_DATA_FLAG_ACCESS_WRITE_META | TEE_DATA_FLAG_OVERWRITE;
 
-    for (buffer_size = min, report_index = 0, po_exists = 0; buffer_size <= max; buffer_size += step, report_index += 2)
+    for (buffer_size = min, report_index = 0, po_exists = 0; buffer_size <= max; buffer_size += step, report_index += 3)
     {
         if (buffer != NULL)
         {
@@ -385,6 +454,7 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
         buffer = TEE_Malloc(buffer_size, TEE_MALLOC_FILL_ZERO);
         if (!buffer)
         {
+            TEE_Free(results);
             TEE_Free(id);
             EMSG("failed allocating buffer of size: %lu", buffer_size);
             return TEE_ERROR_OUT_OF_MEMORY;
@@ -397,6 +467,7 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
                 res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE, id, default_poid_size, flags, &obj);
                 if (res != TEE_SUCCESS)
                 {
+                    TEE_Free(results);
                     TEE_Free(id);
                     TEE_Free(buffer);
                     EMSG("failed calling function \'TEE_OpenPersistentObject\'");
@@ -405,6 +476,7 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
                 res = TEE_WriteObjectData(obj, buffer, buffer_size);
                 if (res != TEE_SUCCESS)
                 {
+                    TEE_Free(results);
                     TEE_CloseObject(obj);
                     TEE_Free(id);
                     TEE_Free(buffer);
@@ -419,6 +491,7 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
                                                  TEE_HANDLE_NULL, buffer, buffer_size, &obj);
                 if (res != TEE_SUCCESS)
                 {
+                    TEE_Free(results);
                     TEE_Free(id);
                     TEE_Free(buffer);
                     EMSG("failed calling function \'TEE_CreatePersistentObject\'");
@@ -431,6 +504,7 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
             res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE, id, default_poid_size, flags, &obj);
             if (res != TEE_SUCCESS)
             {
+                TEE_Free(results);
                 TEE_Free(id);
                 TEE_Free(buffer);
                 EMSG("failed calling function \'TEE_OpenPersistentObject\'");
@@ -439,6 +513,7 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
             res = TEE_ReadObjectData(obj, buffer, buffer_size, &count);
             if ((res |= TEE_SUCCESS) || (count != buffer_size))
             {
+                TEE_Free(results);
                 TEE_CloseObject(obj);
                 TEE_Free(id);
                 TEE_Free(buffer);
@@ -447,13 +522,21 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
             TEE_CloseObject(obj);
             TEE_GetSystemTime(&end);
 
-            sum += execution_time(start, end);
+            results[round] = execution_time(start, end);
+            sum += results[round];
         }
 
         report[report_index] = buffer_size;
         report[report_index + 1] = sum / rounds;
+
+        for (round = 0, report[report_index + 2] = 0; round < rounds; rounds++)
+        {
+            report[report_index + 2] += (results[round] - report[report_index + 1]) * (results[round] - report[report_index + 1]);
+        }
+        report[report_index + 2] = report[report_index + 2] / rounds;
     }
 
+    TEE_Free(results);
     TEE_Free(id);
     TEE_Free(buffer);
 
@@ -463,11 +546,12 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
 TEE_Result trx_benchmark_share(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
 {
     TEE_Result res;
-    uint32_t exp_param_types, *report, *report_size, exp_report_size;
+    uint32_t exp_param_types, *report_size, exp_report_size;
     unsigned long rounds, round, sum;
     trx_handle handle;
     size_t tmp_dst_size;
     TEE_Time start, end;
+    double *report, *results;
 
     (void)&sess_ctx;
 
@@ -491,7 +575,7 @@ TEE_Result trx_benchmark_share(void *sess_ctx, uint32_t param_types, TEE_Param p
         return TEE_ERROR_BAD_PARAMETERS;
     }
 
-    exp_report_size = sizeof(uint32_t);
+    exp_report_size = 2 * sizeof(double);
     if (*report_size < exp_report_size)
     {
         EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
@@ -499,9 +583,17 @@ TEE_Result trx_benchmark_share(void *sess_ctx, uint32_t param_types, TEE_Param p
         return TEE_ERROR_SHORT_BUFFER;
     }
 
+    results = TEE_Malloc(rounds * sizeof(double), TEE_MALLOC_FILL_ZERO);
+    if(!results)
+    {
+        EMSG("failed allocating \"results\" buffer of size: %lu", rounds);
+        return TEE_ERROR_OUT_OF_MEMORY;
+    }
+
     res = trx_handle_init(&handle);
     if (res != TEE_SUCCESS)
     {
+        TEE_Free(results);
         EMSG("trx_handle_init failed with code 0x%x", res);
         return res;
     }
@@ -509,6 +601,7 @@ TEE_Result trx_benchmark_share(void *sess_ctx, uint32_t param_types, TEE_Param p
     res = trx_write(handle, default_poid, default_poid_size, default_buffer, default_buffer_size);
     if (res != TEE_SUCCESS)
     {
+        TEE_Free(results);
         trx_handle_clear(handle);
         DMSG("trx_write failed with code 0x%x", res);
         return TEE_ERROR_GENERIC;
@@ -523,16 +616,26 @@ TEE_Result trx_benchmark_share(void *sess_ctx, uint32_t param_types, TEE_Param p
         TEE_GetSystemTime(&end);
         if (res != TEE_SUCCESS)
         {
+            TEE_Free(results);
             trx_handle_clear(handle);
             DMSG("trx_share failed with code 0x%x", res);
             return TEE_ERROR_GENERIC;
         }
 
-        sum += execution_time(start, end);
+        results[round] = execution_time(start, end);
+        sum += results[round];
     }
 
     report[0] = sum / rounds;
 
+    for (round = 0, report[1] = 0; round < rounds; rounds++)
+    {
+        report[1] += (results[round] - report[0]) * (results[round] - report[0]);
+    }
+    report[1] = report[1] / rounds;
+
+
+    TEE_Free(results);
     trx_handle_clear(handle);
 
     return TEE_SUCCESS;

@@ -164,22 +164,22 @@ void terminate_tee_session(TEEC_Context *ctx, TEEC_Session *sess)
     TEEC_FinalizeContext(ctx);
 }
 
-int trx_benchmark_print(uint32_t *report, uint32_t report_size)
+int trx_benchmark_print(double *report, uint32_t report_size)
 {
     uint32_t report_len, report_index;
 
-    report_len = report_size / sizeof(uint32_t);
+    report_len = report_size / sizeof(double);
 
-    if (report_len % 2)
+    if (report_len % 3)
     {
         return 1;
     }
 
-    printf("size (B), execution time (ms)\n");
+    printf("size (B), execution time (ms), variance\n");
 
-    for (report_index = 0; report_index < report_len; report_index += 2)
+    for (report_index = 0; report_index < report_len; report_index += 3)
     {
-        printf("%" PRIu32 ",%" PRIu32 "\n", report[report_index], report[report_index + 1]);
+        printf("%f,%f,%f\n", report[report_index], report[report_index + 1], report[report_index + 3]);
     }
 
     return 0;
@@ -192,7 +192,7 @@ void trx_benchmark_write(unsigned long min, unsigned long max, unsigned long ste
     uint32_t err_origin;
     TEEC_Context ctx;
     TEEC_Session sess;
-    uint32_t *report = NULL;
+    double *report = NULL;
     uint32_t report_size = 0;
     int print_res;
 
@@ -250,7 +250,7 @@ void trx_benchmark_read(unsigned long min, unsigned long max, unsigned long step
     uint32_t err_origin;
     TEEC_Context ctx;
     TEEC_Session sess;
-    uint32_t *report = NULL;
+    double *report = NULL;
     uint32_t report_size = 0;
     int print_res;
 
@@ -308,7 +308,7 @@ void trx_benchmark_gp_write(unsigned long min, unsigned long max, unsigned long 
     uint32_t err_origin;
     TEEC_Context ctx;
     TEEC_Session sess;
-    uint32_t *report = NULL;
+    double *report = NULL;
     uint32_t report_size = 0;
     int print_res;
 
@@ -366,7 +366,7 @@ void trx_benchmark_gp_read(unsigned long min, unsigned long max, unsigned long s
     uint32_t err_origin;
     TEEC_Context ctx;
     TEEC_Session sess;
-    uint32_t *report = NULL;
+    double *report = NULL;
     uint32_t report_size = 0;
     int print_res;
 
@@ -424,9 +424,8 @@ void trx_benchmark_share(unsigned long rounds)
     uint32_t err_origin;
     TEEC_Context ctx;
     TEEC_Session sess;
-    uint32_t *report = NULL;
+    double *report = NULL;
     uint32_t report_size = 0;
-    int print_res;
 
     prepare_tee_session(&ctx, &sess);
 
@@ -460,13 +459,7 @@ void trx_benchmark_share(unsigned long rounds)
         errx(1, "TEEC_InvokeCommand failed with code 0x%x origin 0x%x", res, err_origin);
     }
 
-    print_res = trx_benchmark_print(report, report_size);
-    if (print_res)
-    {
-        free(report);
-        terminate_tee_session(&ctx, &sess);
-        errx(1, "failed to print report");
-    }
+    printf("execution time (ms), variance\n%f,%f\n", report[0], report[1]);
 
     free(report);
     terminate_tee_session(&ctx, &sess);
