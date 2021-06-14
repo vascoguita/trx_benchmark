@@ -23,8 +23,12 @@ Open the project directory on the destination platform and run the following com
 Open the project directory on the destination platform and run the following command:
 
 ```shell
-./host/trx_benchmark -o <operation> -m <minimum_value> -M <maximum_value> -s <step>
+./host/trx_benchmark -o <operation> -m <minimum_value> -M <maximum_value> -s <step> -r <rounds>
 ```
 
 The TRX benchmark supports the following operations:
 * write
+* read
+* gp_write
+* gp_read
+* share (no -m -M -s values required)
