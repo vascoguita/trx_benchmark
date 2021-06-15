@@ -1,5 +1,8 @@
 #include <tee_internal_api.h>
 #include <trx/trx.h>
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #include <trx_benchmark_ta.h>
 #include "trx_benchmark_ta_private.h"
@@ -525,5 +528,317 @@ TEE_Result trx_benchmark_share(void *sess_ctx, uint32_t param_types, TEE_Param p
 
     trx_handle_clear(handle);
 
+    return TEE_SUCCESS;
+}
+
+TEE_Result trx_benchmark_mount(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
+{
+    TEE_Result res;
+    uint32_t exp_param_types, *report, *report_size, exp_report_size;
+    unsigned long rounds, round;
+    trx_handle handle;
+    size_t tmp_dst_size, src_size;
+    char *src = NULL;
+    char *dir = NULL;
+    size_t dir_size;
+    TEE_Time start, end;
+
+    (void)&sess_ctx;
+
+    DMSG("has been called");
+
+    exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INPUT, TEE_PARAM_TYPE_MEMREF_OUTPUT,
+                                      TEE_PARAM_TYPE_NONE, TEE_PARAM_TYPE_NONE);
+    if (param_types != exp_param_types)
+    {
+        EMSG("failed checking parameter types");
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    rounds = (unsigned long)params[0].value.a;
+    report = params[1].memref.buffer;
+    report_size = &(params[1].memref.size);
+
+    if (rounds <= 0)
+    {
+        EMSG("failed checking parameter values: rounds = %lu", rounds);
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    exp_report_size = sizeof(uint32_t) * rounds;
+    if (*report_size < exp_report_size)
+    {
+        EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
+        *report_size = exp_report_size;
+        return TEE_ERROR_SHORT_BUFFER;
+    }
+
+    res = trx_handle_init(&handle);
+    if (res != TEE_SUCCESS)
+    {
+        EMSG("trx_handle_init failed with code 0x%x", res);
+        return res;
+    }
+
+    res = trx_write(handle, default_poid, default_poid_size, default_buffer, default_buffer_size);
+    if (res != TEE_SUCCESS)
+    {
+        trx_handle_clear(handle);
+        DMSG("trx_write failed with code 0x%x", res);
+        return TEE_ERROR_GENERIC;
+    }
+
+    tmp_dst_size = default_dst_size;
+    res = trx_share(handle, default_udid, default_udid_size, default_mount_point, default_mount_point_size,
+                    default_label, default_label_size, default_dst, &tmp_dst_size);
+    if (res != TEE_SUCCESS)
+    {
+        trx_handle_clear(handle);
+        DMSG("trx_share failed with code 0x%x", res);
+        return TEE_ERROR_GENERIC;
+    }
+
+    memcpy(&src_size, default_dst, sizeof(size_t));
+
+    src = malloc(src_size);
+    if (!src)
+    {
+        trx_handle_clear(handle);
+        EMSG("failed allocating \"src\" buffer of size: %lu", src_size);
+        return TEE_ERROR_OUT_OF_MEMORY;
+    }
+
+    memcpy(src, default_dst + sizeof(size_t), src_size);
+
+    memcpy(&dir_size, default_dst + sizeof(size_t) + src_size, sizeof(size_t));
+    if (!(dir = malloc(dir_size)))
+    {
+        free(src);
+        trx_handle_clear(handle);
+        EMSG("failed allocating \"dir\" buffer of size: %lu", dir_size);
+        return TEE_ERROR_OUT_OF_MEMORY;
+    }
+    memcpy(dir, default_dst + sizeof(size_t) + src_size + sizeof(size_t), dir_size);
+
+
+    for (round = 0; round < rounds; round++)
+    {
+        TEE_GetSystemTime(&start);
+        res = trx_mount(handle, default_udid, default_udid_size, dir, dir_size,
+                        default_mount_point, default_mount_point_size, src, src_size);
+        TEE_GetSystemTime(&end);
+        if (res != TEE_SUCCESS)
+        {
+            free(dir);
+            free(src);
+            trx_handle_clear(handle);
+            DMSG("trx_mount failed with code 0x%x", res);
+            return TEE_ERROR_GENERIC;
+        }
+
+        report[round] = execution_time(start, end);
+    }
+
+    free(dir);
+    free(src);
+    trx_handle_clear(handle);
+
+    return TEE_SUCCESS;
+}
+
+TEE_Result trx_benchmark_pop_write(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
+{
+    TEE_Result res;
+    uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index;
+    unsigned long min, max, step, rounds, round, pop, current_pop;
+    trx_handle handle;
+    TEE_Time start, end;
+    char poid[10];
+    size_t poid_size = 10;
+    int tmp_size;
+
+    (void)&sess_ctx;
+
+    DMSG("has been called");
+
+    exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INPUT, TEE_PARAM_TYPE_VALUE_INPUT,
+                                      TEE_PARAM_TYPE_MEMREF_OUTPUT, TEE_PARAM_TYPE_NONE);
+    if (param_types != exp_param_types)
+    {
+        EMSG("failed checking parameter types");
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    min = (unsigned long)params[0].value.a;
+    max = (unsigned long)params[0].value.b;
+    step = (unsigned long)params[1].value.a;
+    rounds = (unsigned long)params[1].value.b;
+    report = params[2].memref.buffer;
+    report_size = &(params[2].memref.size);
+
+    if (max < min || step <= 0 || rounds <= 0)
+    {
+        EMSG("failed checking parameter values: min = %lu, max = %lu, step = %lu, rounds = %lu", min, max, step, rounds);
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    exp_report_size = (((max - min) / step) + 1) * sizeof(uint32_t) * (1 + rounds);
+    if (*report_size < exp_report_size)
+    {
+        EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
+        *report_size = exp_report_size;
+        return TEE_ERROR_SHORT_BUFFER;
+    }
+
+    res = trx_handle_init(&handle);
+    if (res != TEE_SUCCESS)
+    {
+        EMSG("trx_handle_init failed with code 0x%x", res);
+        return res;
+    }
+
+    for (pop = min, report_index = 0, current_pop = 0; pop <= max; pop += step, report_index += (1 + rounds))
+    {
+        for(; current_pop < pop; current_pop++)
+        {
+            if(!(tmp_size = snprintf(poid, poid_size, "%lu", current_pop)))
+            {
+                trx_handle_clear(handle);
+                DMSG("snprintf failed");
+                return TEE_ERROR_GENERIC;
+            }
+
+            res = trx_write(handle, poid, tmp_size, default_buffer, default_buffer_size);
+            if (res != TEE_SUCCESS)
+            {
+                trx_handle_clear(handle);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+        }
+
+        report[report_index] = pop;
+        for (round = 0; round < rounds; round++)
+        {
+            TEE_GetSystemTime(&start);
+            res = trx_write(handle, default_poid, default_poid_size, default_buffer, default_buffer_size);
+            TEE_GetSystemTime(&end);
+            if (res != TEE_SUCCESS)
+            {
+                trx_handle_clear(handle);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+            report[report_index + round + 1] = execution_time(start, end);
+        }
+    }
+
+    trx_handle_clear(handle);
+
+    return TEE_SUCCESS;
+}
+
+
+TEE_Result trx_benchmark_pop_read(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
+{
+    TEE_Result res;
+    uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index;
+    unsigned long min, max, step, rounds, round, pop, current_pop;
+    uint8_t *buffer = NULL;
+    size_t tmp_buffer_size;
+    trx_handle handle;
+    TEE_Time start, end;
+    char poid[10];
+    size_t poid_size = 10;
+    int tmp_size;
+
+    (void)&sess_ctx;
+
+    DMSG("has been called");
+
+    exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INPUT, TEE_PARAM_TYPE_VALUE_INPUT,
+                                      TEE_PARAM_TYPE_MEMREF_OUTPUT, TEE_PARAM_TYPE_NONE);
+    if (param_types != exp_param_types)
+    {
+        EMSG("failed checking parameter types");
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    min = (unsigned long)params[0].value.a;
+    max = (unsigned long)params[0].value.b;
+    step = (unsigned long)params[1].value.a;
+    rounds = (unsigned long)params[1].value.b;
+    report = params[2].memref.buffer;
+    report_size = &(params[2].memref.size);
+
+    if (max < min || step <= 0 || rounds <= 0)
+    {
+        EMSG("failed checking parameter values: min = %lu, max = %lu, step = %lu, rounds = %lu", min, max, step, rounds);
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    exp_report_size = (((max - min) / step) + 1) * sizeof(uint32_t) * (rounds + 1);
+    if (*report_size < exp_report_size)
+    {
+        EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
+        *report_size = exp_report_size;
+        return TEE_ERROR_SHORT_BUFFER;
+    }
+
+    res = trx_handle_init(&handle);
+    if (res != TEE_SUCCESS)
+    {
+        EMSG("trx_handle_init failed with code 0x%x", res);
+        return res;
+    }
+
+    for (pop = min, report_index = 0, current_pop = 0; pop <= max; pop += step, report_index += (rounds + 1))
+    {
+        for(; current_pop < pop; current_pop++)
+        {
+            if(!(tmp_size = snprintf(poid, poid_size, "%lu", current_pop)))
+            {
+                trx_handle_clear(handle);
+                DMSG("snprintf failed");
+                return TEE_ERROR_GENERIC;
+            }
+
+            res = trx_write(handle, poid, tmp_size, default_buffer, default_buffer_size);
+            if (res != TEE_SUCCESS)
+            {
+                trx_handle_clear(handle);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+        }
+        report[report_index] = pop;
+        for (round = 0; round < rounds; round++)
+        {
+            res = trx_write(handle, default_poid, default_poid_size, default_buffer, default_buffer_size);
+            if (res != TEE_SUCCESS)
+            {
+                trx_handle_clear(handle);
+                TEE_Free(buffer);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+
+            tmp_buffer_size = default_buffer_size;
+            TEE_GetSystemTime(&start);
+            res = trx_read(handle, default_poid, default_poid_size, buffer, &tmp_buffer_size);
+            TEE_GetSystemTime(&end);
+            if ((res != TEE_SUCCESS) || (tmp_buffer_size != default_buffer_size))
+            {
+                trx_handle_clear(handle);
+                TEE_Free(buffer);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+
+            report[report_index + round + 1] = execution_time(start, end);
+        }
+    }
+
+    trx_handle_clear(handle);
     return TEE_SUCCESS;
 }

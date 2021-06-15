@@ -9,6 +9,12 @@ TEE_Result trx_benchmark_read(void *sess_ctx, uint32_t param_types, TEE_Param pa
 TEE_Result trx_benchmark_gp_write(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
 TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
 TEE_Result trx_benchmark_share(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
+TEE_Result trx_benchmark_mount(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
+
+TEE_Result trx_benchmark_pop_write(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
+TEE_Result trx_benchmark_pop_read(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
+TEE_Result trx_benchmark_gp_pop_write(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
+TEE_Result trx_benchmark_gp_pop_read(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
 
 static const char default_poid[] = "default_poid";
 static const size_t default_poid_size = 13;
