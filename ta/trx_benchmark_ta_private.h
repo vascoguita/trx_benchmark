@@ -18,7 +18,7 @@ TEE_Result trx_benchmark_gp_pop_read(void *sess_ctx, uint32_t param_types, TEE_P
 
 static const char default_poid[] = "default_poid";
 static const size_t default_poid_size = 13;
-static const uint8_t default_buffer[1];
+uint8_t default_buffer[1];
 static const size_t default_buffer_size = 1;
 static const unsigned char default_udid[] = "a";
 static const size_t default_udid_size = 2;
