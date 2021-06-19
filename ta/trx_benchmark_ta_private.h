@@ -11,8 +11,10 @@ TEE_Result trx_benchmark_gp_read(void *sess_ctx, uint32_t param_types, TEE_Param
 TEE_Result trx_benchmark_share(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
 TEE_Result trx_benchmark_mount(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
 
-TEE_Result trx_benchmark_pop_write(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
-TEE_Result trx_benchmark_pop_read(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
+TEE_Result trx_benchmark_pop_write_best(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
+TEE_Result trx_benchmark_pop_read_best(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
+TEE_Result trx_benchmark_pop_write_worst(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
+TEE_Result trx_benchmark_pop_read_worst(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
 TEE_Result trx_benchmark_gp_pop_write(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
 TEE_Result trx_benchmark_gp_pop_read(void *sess_ctx, uint32_t param_types, TEE_Param params[4]);
 

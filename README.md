@@ -32,3 +32,10 @@ The TRX benchmark supports the following operations:
 * gp_write
 * gp_read
 * share (no -m -M -s values required)
+* mount (no -m -M -s values required)
+* pop_write_best
+* pop_write_worst
+* pop_read_best
+* pop_read_worst
+* gp_pop_write
+* gp_pop_read
