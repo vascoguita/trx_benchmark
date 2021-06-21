@@ -840,6 +840,220 @@ TEE_Result trx_benchmark_pop_read_best(void *sess_ctx, uint32_t param_types, TEE
     return TEE_SUCCESS;
 }
 
+TEE_Result trx_benchmark_pop_write(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
+{
+    TEE_Result res;
+    uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index;
+    unsigned long min, max, step, rounds, round, pop, current_pop, rnd;
+    trx_handle handle;
+    TEE_Time start, end;
+    char poid[10];
+    size_t poid_size = 10;
+    int tmp_size;
+
+    (void)&sess_ctx;
+
+    DMSG("has been called");
+
+    exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INPUT, TEE_PARAM_TYPE_VALUE_INPUT,
+                                      TEE_PARAM_TYPE_MEMREF_OUTPUT, TEE_PARAM_TYPE_NONE);
+    if (param_types != exp_param_types)
+    {
+        EMSG("failed checking parameter types");
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    min = (unsigned long)params[0].value.a;
+    max = (unsigned long)params[0].value.b;
+    step = (unsigned long)params[1].value.a;
+    rounds = (unsigned long)params[1].value.b;
+    report = params[2].memref.buffer;
+    report_size = &(params[2].memref.size);
+
+    if (max < min || step <= 0 || rounds <= 0)
+    {
+        EMSG("failed checking parameter values: min = %lu, max = %lu, step = %lu, rounds = %lu", min, max, step, rounds);
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    exp_report_size = (((max - min) / step) + 1) * sizeof(uint32_t) * (1 + rounds);
+    if (*report_size < exp_report_size)
+    {
+        EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
+        *report_size = exp_report_size;
+        return TEE_ERROR_SHORT_BUFFER;
+    }
+
+    res = trx_handle_init(&handle);
+    if (res != TEE_SUCCESS)
+    {
+        EMSG("trx_handle_init failed with code 0x%x", res);
+        return res;
+    }
+
+    for (pop = min, report_index = 0, current_pop = 0; pop <= max; pop += step, report_index += (1 + rounds))
+    {
+        for(; current_pop < pop; current_pop++)
+        {
+            if(!(tmp_size = snprintf(poid, poid_size, "%lu", current_pop)))
+            {
+                trx_handle_clear(handle);
+                DMSG("snprintf failed");
+                return TEE_ERROR_GENERIC;
+            }
+
+            res = trx_write(handle, poid, tmp_size, default_buffer, default_buffer_size);
+            if (res != TEE_SUCCESS)
+            {
+                trx_handle_clear(handle);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+        }
+
+        TEE_GenerateRandom(&rnd, sizeof(unsigned long));
+
+        if(!(tmp_size = snprintf(poid, poid_size, "%lu", rnd % (pop + 1))))
+        {
+            trx_handle_clear(handle);
+            DMSG("snprintf failed");
+            return TEE_ERROR_GENERIC;
+        }
+
+        report[report_index] = pop;
+        for (round = 0; round < rounds; round++)
+        {
+            
+            TEE_GetSystemTime(&start);
+            res = trx_write(handle, poid, tmp_size, default_buffer, default_buffer_size);
+            TEE_GetSystemTime(&end);
+            if (res != TEE_SUCCESS)
+            {
+                trx_handle_clear(handle);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+            report[report_index + round + 1] = execution_time(start, end);
+        }
+    }
+
+    trx_handle_clear(handle);
+
+    return TEE_SUCCESS;
+}
+
+
+TEE_Result trx_benchmark_pop_read(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
+{
+    TEE_Result res;
+    uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index;
+    unsigned long min, max, step, rounds, round, pop, current_pop, rnd;
+    size_t tmp_buffer_size;
+    trx_handle handle;
+    TEE_Time start, end;
+    char poid[10];
+    size_t poid_size = 10;
+    int tmp_size;
+
+    (void)&sess_ctx;
+
+    DMSG("has been called");
+
+    exp_param_types = TEE_PARAM_TYPES(TEE_PARAM_TYPE_VALUE_INPUT, TEE_PARAM_TYPE_VALUE_INPUT,
+                                      TEE_PARAM_TYPE_MEMREF_OUTPUT, TEE_PARAM_TYPE_NONE);
+    if (param_types != exp_param_types)
+    {
+        EMSG("failed checking parameter types");
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    min = (unsigned long)params[0].value.a;
+    max = (unsigned long)params[0].value.b;
+    step = (unsigned long)params[1].value.a;
+    rounds = (unsigned long)params[1].value.b;
+    report = params[2].memref.buffer;
+    report_size = &(params[2].memref.size);
+
+    if (max < min || step <= 0 || rounds <= 0)
+    {
+        EMSG("failed checking parameter values: min = %lu, max = %lu, step = %lu, rounds = %lu", min, max, step, rounds);
+        return TEE_ERROR_BAD_PARAMETERS;
+    }
+
+    exp_report_size = (((max - min) / step) + 1) * sizeof(uint32_t) * (rounds + 1);
+    if (*report_size < exp_report_size)
+    {
+        EMSG("failed checking report buffer size: %" PRIu32 ". Expected size: %" PRIu32, *report_size, exp_report_size);
+        *report_size = exp_report_size;
+        return TEE_ERROR_SHORT_BUFFER;
+    }
+
+    res = trx_handle_init(&handle);
+    if (res != TEE_SUCCESS)
+    {
+        EMSG("trx_handle_init failed with code 0x%x", res);
+        return res;
+    }
+
+    for (pop = min, report_index = 0, current_pop = 0; pop <= max; pop += step, report_index += (rounds + 1))
+    {
+        for(; current_pop < pop; current_pop++)
+        {
+            if(!(tmp_size = snprintf(poid, poid_size, "%lu", current_pop)))
+            {
+                trx_handle_clear(handle);
+                DMSG("snprintf failed");
+                return TEE_ERROR_GENERIC;
+            }
+
+            res = trx_write(handle, poid, tmp_size, default_buffer, default_buffer_size);
+            if (res != TEE_SUCCESS)
+            {
+                trx_handle_clear(handle);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+        }
+
+        TEE_GenerateRandom(&rnd, sizeof(unsigned long));
+
+        if(!(tmp_size = snprintf(poid, poid_size, "%lu", rnd % (current_pop + 1))))
+        {
+            trx_handle_clear(handle);
+            DMSG("snprintf failed");
+            return TEE_ERROR_GENERIC;
+        }
+
+        report[report_index] = pop;
+        for (round = 0; round < rounds; round++)
+        {
+            res = trx_write(handle, poid, tmp_size, default_buffer, default_buffer_size);
+            if (res != TEE_SUCCESS)
+            {
+                trx_handle_clear(handle);
+                DMSG("trx_write failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+
+            tmp_buffer_size = default_buffer_size;
+            TEE_GetSystemTime(&start);
+            res = trx_read(handle, poid, tmp_size, default_buffer, &tmp_buffer_size);
+            TEE_GetSystemTime(&end);
+            if ((res != TEE_SUCCESS) || (tmp_buffer_size != default_buffer_size))
+            {
+                trx_handle_clear(handle);
+                DMSG("trx_read failed with code 0x%x", res);
+                return TEE_ERROR_GENERIC;
+            }
+
+            report[report_index + round + 1] = execution_time(start, end);
+        }
+    }
+
+    trx_handle_clear(handle);
+    return TEE_SUCCESS;
+}
+
 TEE_Result trx_benchmark_pop_write_worst(void *sess_ctx, uint32_t param_types, TEE_Param params[4])
 {
     TEE_Result res;
@@ -1054,8 +1268,8 @@ TEE_Result trx_benchmark_gp_pop_write(void *sess_ctx, uint32_t param_types, TEE_
 {
     TEE_Result res;
     uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index, flags;
-    unsigned long min, max, step, rounds, round, po_exists, pop, current_pop;
-    uint8_t *id = NULL;
+    unsigned long min, max, step, rounds, round, pop, current_pop, rnd;
+    char *id = NULL;
     TEE_Time start, end;
     TEE_ObjectHandle obj = TEE_HANDLE_NULL;
     char *poid;
@@ -1101,7 +1315,7 @@ TEE_Result trx_benchmark_gp_pop_write(void *sess_ctx, uint32_t param_types, TEE_
         return TEE_ERROR_GENERIC;
     }
 
-    if (!(id = TEE_Malloc(default_poid_size, 0)))
+    if (!(id = TEE_Malloc(poid_size, 0)))
     {
         TEE_Free(poid);
         EMSG("failed calling function \'TEE_Malloc\'");
@@ -1112,7 +1326,7 @@ TEE_Result trx_benchmark_gp_pop_write(void *sess_ctx, uint32_t param_types, TEE_
     flags = TEE_DATA_FLAG_ACCESS_READ | TEE_DATA_FLAG_ACCESS_WRITE |
             TEE_DATA_FLAG_ACCESS_WRITE_META | TEE_DATA_FLAG_OVERWRITE;
 
-    for (pop = min, report_index = 0, po_exists = 0, current_pop = 0; pop <= max; pop += step, report_index += (1 + round))
+    for (pop = min, report_index = 0, current_pop = 0; pop <= max; pop += step, report_index += (1 + round))
     {
         for(; current_pop < pop; current_pop++)
         {
@@ -1136,13 +1350,23 @@ TEE_Result trx_benchmark_gp_pop_write(void *sess_ctx, uint32_t param_types, TEE_
             TEE_CloseObject(obj);
         }
 
+        TEE_GenerateRandom(&rnd, sizeof(unsigned long));
+
+        if(!(tmp_size = snprintf(id, poid_size, "%lu", rnd % (pop + 1))))
+        {
+            TEE_Free(poid);
+            TEE_Free(id);
+            DMSG("snprintf failed");
+            return TEE_ERROR_GENERIC;
+        }
+
         report[report_index] = pop;
         for (round = 0; round < rounds; round++)
         {
-            if (po_exists)
+            if (round != 0)
             {
                 TEE_GetSystemTime(&start);
-                res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE, id, default_poid_size, flags, &obj);
+                res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE, id, poid_size, flags, &obj);
                 if (res != TEE_SUCCESS)
                 {
                     TEE_Free(poid);
@@ -1165,7 +1389,7 @@ TEE_Result trx_benchmark_gp_pop_write(void *sess_ctx, uint32_t param_types, TEE_
             else
             {
                 TEE_GetSystemTime(&start);
-                res = TEE_CreatePersistentObject(TEE_STORAGE_PRIVATE, id, default_poid_size, flags,
+                res = TEE_CreatePersistentObject(TEE_STORAGE_PRIVATE, id, poid_size, flags,
                                                  TEE_HANDLE_NULL, default_buffer, default_buffer_size, &obj);
                 if (res != TEE_SUCCESS)
                 {
@@ -1176,7 +1400,6 @@ TEE_Result trx_benchmark_gp_pop_write(void *sess_ctx, uint32_t param_types, TEE_
                 }
                 TEE_CloseObject(obj);
                 TEE_GetSystemTime(&end);
-                po_exists = 1;
             }
 
             report[report_index + round + 1] = execution_time(start, end);
@@ -1194,8 +1417,8 @@ TEE_Result trx_benchmark_gp_pop_read(void *sess_ctx, uint32_t param_types, TEE_P
 {
     TEE_Result res;
     uint32_t exp_param_types, *report, *report_size, exp_report_size, report_index, flags, count;
-    unsigned long min, max, step, rounds, round, po_exists, pop, current_pop;
-    uint8_t *id = NULL;
+    unsigned long min, max, step, rounds, round, pop, current_pop, rnd;
+    char *id = NULL;
     TEE_Time start, end;
     TEE_ObjectHandle obj = TEE_HANDLE_NULL;
     char *poid;
@@ -1241,7 +1464,7 @@ TEE_Result trx_benchmark_gp_pop_read(void *sess_ctx, uint32_t param_types, TEE_P
         return TEE_ERROR_GENERIC;
     }
 
-    if (!(id = TEE_Malloc(default_poid_size, 0)))
+    if (!(id = TEE_Malloc(poid_size, 0)))
     {
         TEE_Free(poid);
         EMSG("failed calling function \'TEE_Malloc\'");
@@ -1251,7 +1474,7 @@ TEE_Result trx_benchmark_gp_pop_read(void *sess_ctx, uint32_t param_types, TEE_P
     flags = TEE_DATA_FLAG_ACCESS_READ | TEE_DATA_FLAG_ACCESS_WRITE |
             TEE_DATA_FLAG_ACCESS_WRITE_META | TEE_DATA_FLAG_OVERWRITE;
 
-    for (pop = min, report_index = 0, po_exists = 0, current_pop = 0; pop <= max; pop += step, report_index += (1 + rounds))
+    for (pop = min, report_index = 0, current_pop = 0; pop <= max; pop += step, report_index += (1 + rounds))
     {
         for(; current_pop < pop; current_pop++)
         {
@@ -1274,13 +1497,23 @@ TEE_Result trx_benchmark_gp_pop_read(void *sess_ctx, uint32_t param_types, TEE_P
             }
             TEE_CloseObject(obj);
         }
+
+        TEE_GenerateRandom(&rnd, sizeof(unsigned long));
+
+        if(!(tmp_size = snprintf(id, poid_size, "%lu", rnd % (pop + 1))))
+        {
+            TEE_Free(poid);
+            TEE_Free(id);
+            DMSG("snprintf failed");
+            return TEE_ERROR_GENERIC;
+        }
         
         report[report_index] = pop;
         for (round = 0; round < rounds; round++)
         {
-            if (po_exists)
+            if (round != 0)
             {
-                res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE, id, default_poid_size, flags, &obj);
+                res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE, id, poid_size, flags, &obj);
                 if (res != TEE_SUCCESS)
                 {
                     TEE_Free(poid);
@@ -1301,7 +1534,7 @@ TEE_Result trx_benchmark_gp_pop_read(void *sess_ctx, uint32_t param_types, TEE_P
             }
             else
             {
-                res = TEE_CreatePersistentObject(TEE_STORAGE_PRIVATE, id, default_poid_size, flags,
+                res = TEE_CreatePersistentObject(TEE_STORAGE_PRIVATE, id, poid_size, flags,
                                                  TEE_HANDLE_NULL, default_buffer, default_buffer_size, &obj);
                 if (res != TEE_SUCCESS)
                 {
@@ -1311,10 +1544,10 @@ TEE_Result trx_benchmark_gp_pop_read(void *sess_ctx, uint32_t param_types, TEE_P
                     return TEE_ERROR_GENERIC;
                 }
                 TEE_CloseObject(obj);
-                po_exists = 1;
             }
+
             TEE_GetSystemTime(&start);
-            res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE, id, default_poid_size, flags, &obj);
+            res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE, id, poid_size, flags, &obj);
             if (res != TEE_SUCCESS)
             {
                 TEE_Free(poid);
